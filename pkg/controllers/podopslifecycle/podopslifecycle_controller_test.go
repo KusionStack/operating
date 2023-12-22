@@ -196,7 +196,7 @@ var _ = Describe("podopslifecycle controller", func() {
 			}
 
 			return nil
-		}, 5*time.Second, 1*time.Second).Should(BeNil())
+		}, 3*time.Second, 200*time.Millisecond).Should(BeNil())
 	})
 
 	It("create pod with label complete", func() {
@@ -239,7 +239,7 @@ var _ = Describe("podopslifecycle controller", func() {
 			}
 
 			return nil
-		}, 5*time.Second, 1*time.Second).Should(BeNil())
+		}, 3*time.Second, 200*time.Millisecond).Should(BeNil())
 	})
 
 	It("update pod with label complete", func() {
@@ -256,20 +256,23 @@ var _ = Describe("podopslifecycle controller", func() {
 
 		<-request
 
-		pod = &corev1.Pod{}
-		err = mgr.GetAPIReader().Get(context.Background(), client.ObjectKey{
-			Name:      "test",
-			Namespace: "default",
-		}, pod)
-		Expect(err).NotTo(HaveOccurred())
+		Eventually(func() error {
+			pod = &corev1.Pod{}
+			err = mgr.GetAPIReader().Get(context.Background(), client.ObjectKey{
+				Name:      "test",
+				Namespace: "default",
+			}, pod)
+			if err != nil {
+				return fmt.Errorf("fail to get pod: %v", err)
+			}
 
-		pod.ObjectMeta.Labels = map[string]string{
-			v1alpha1.ControlledByKusionStackLabelKey:                    "true",
-			fmt.Sprintf("%s/%s", v1alpha1.PodOperateLabelPrefix, id):    timestamp,
-			fmt.Sprintf("%s/%s", v1alpha1.PodCompletingLabelPrefix, id): timestamp,
-		}
-		err = mgr.GetClient().Update(context.Background(), pod)
-		Expect(err).NotTo(HaveOccurred())
+			pod.ObjectMeta.Labels = map[string]string{
+				v1alpha1.ControlledByKusionStackLabelKey:                    "true",
+				fmt.Sprintf("%s/%s", v1alpha1.PodOperateLabelPrefix, id):    timestamp,
+				fmt.Sprintf("%s/%s", v1alpha1.PodCompletingLabelPrefix, id): timestamp,
+			}
+			return mgr.GetClient().Update(context.Background(), pod)
+		}, 3*time.Second, 200*time.Millisecond).Should(BeNil())
 
 		pod = &corev1.Pod{}
 		Eventually(func() error {
@@ -277,7 +280,7 @@ var _ = Describe("podopslifecycle controller", func() {
 				Name:      "test",
 				Namespace: "default",
 			}, pod); err != nil {
-				return fmt.Errorf("fail to get pod: %s", err)
+				return fmt.Errorf("fail to get pod: %v", err)
 			}
 
 			if len(pod.Status.Conditions) != 1 {
@@ -293,7 +296,7 @@ var _ = Describe("podopslifecycle controller", func() {
 			}
 
 			return nil
-		}, 5*time.Second, 1*time.Second).Should(BeNil())
+		}, 3*time.Second, 200*time.Millisecond).Should(BeNil())
 	})
 })
 

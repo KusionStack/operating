@@ -186,6 +186,7 @@ func (r *ReconcilePodOpsLifecycle) Reconcile(ctx context.Context, request reconc
 	return reconcile.Result{}, nil
 }
 
+// addServiceAvailable try to add service available label to pod
 func (r *ReconcilePodOpsLifecycle) addServiceAvailable(pod *corev1.Pod) (bool, error) {
 	if pod.Labels == nil {
 		return false, nil
@@ -194,7 +195,8 @@ func (r *ReconcilePodOpsLifecycle) addServiceAvailable(pod *corev1.Pod) (bool, e
 		return false, nil
 	}
 
-	satisfied, notSatisfiedFinalizers, err := controllerutils.IsExpectedFinalizerSatisfied(pod) // whether all expected finalizers are satisfied
+	// whether all expected finalizers are satisfied
+	satisfied, notSatisfiedFinalizers, err := controllerutils.IsExpectedFinalizerSatisfied(pod)
 	if err != nil {
 		return false, err
 	}
@@ -207,7 +209,7 @@ func (r *ReconcilePodOpsLifecycle) addServiceAvailable(pod *corev1.Pod) (bool, e
 		if !allDirty {
 			return false, nil
 		}
-		// all not satisfied expected finalizers are dirty, so actually the pod satisfied expected finalizer now
+		// all not satisfied finalizers are dirty, so actually the pod satisfied expected finalizers now
 	}
 
 	if !controllerutils.IsPodReady(pod) {
@@ -221,7 +223,7 @@ func (r *ReconcilePodOpsLifecycle) addServiceAvailable(pod *corev1.Pod) (bool, e
 }
 
 func (r *ReconcilePodOpsLifecycle) removeDirtyExpectedFinalizer(pod *corev1.Pod, notSatisfiedFinalizers map[string]string) (bool, error) {
-	var allDirty bool
+	var allDirty bool // whether all not atisfied finalizers are dirty
 	dirtyExpectedFinalizer := make(map[string]string)
 
 	for expectedFlzKey, finalizer := range notSatisfiedFinalizers {
