@@ -35,10 +35,11 @@ const (
 type OperationProgress string
 
 const (
-	OperationProgressPending    OperationProgress = "Pending"
-	OperationProgressProcessing OperationProgress = "Processing"
-	OperationProgressFailed     OperationProgress = "Failed"
-	OperationProgressSucceeded  OperationProgress = "Succeeded"
+	OperationProgressPending            OperationProgress = "Pending"
+	OperationProgressProcessing         OperationProgress = "Processing"
+	OperationProgressEndingOpsLifecycle OperationProgress = "EndingOpsLifecycle"
+	OperationProgressFailed             OperationProgress = "Failed"
+	OperationProgressSucceeded          OperationProgress = "Succeeded"
 )
 
 // OperationJobSpec defines the desired state of OperationJob
