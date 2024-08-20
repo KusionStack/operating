@@ -149,6 +149,7 @@ func (r *ReconcileOperationJob) filterAndOperateAllowOpsTargets(
 			} else {
 				candidate.OpsStatus.Progress = appsv1alpha1.OperationProgressProcessing
 			}
+			candidate.OpsStatus.Progress = appsv1alpha1.OperationProgressProcessing
 		}
 
 		if isAllowedOps {
@@ -288,8 +289,8 @@ func (r *ReconcileOperationJob) releaseTargets(ctx context.Context, operationJob
 			releaseErr = controllerutils.AggregateErrors([]error{releaseErr, err})
 		}
 		// mark candidate as failed if not finished
-		if !IsCandidateOpsFinished(candidate) {
-			candidate.OpsStatus.Progress = appsv1alpha1.OperationProgressFailed
+		if IsCandidateOpsFinished(candidate) {
+			return nil
 		}
 		candidate.OpsStatus.Progress = appsv1alpha1.OperationProgressFailed
 		return nil
