@@ -26,7 +26,9 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	appsv1alpha1 "kusionstack.io/kube-api/apps/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	appsv1alpha1 "kusionstack.io/kube-api/apps/v1alpha1"
 
+	"kusionstack.io/kuperator/pkg/controllers/operationjob/replace"
 	"kusionstack.io/kuperator/test/e2e/framework"
 )
 
@@ -164,7 +166,11 @@ var _ = SIGDescribe("OperationJob", func() {
 			Eventually(func() error { return ojTester.ExpectOperationJobProgress(oj2, appsv1alpha1.OperationProgressSucceeded) }, 30*time.Second, 3*time.Second).ShouldNot(HaveOccurred())
 
 			By("Check replace new pod of OperationJobs")
+<<<<<<< HEAD
 			Expect(oj1.Status.TargetDetails[0].ExtraInfo[appsv1alpha1.ExtraInfoReplacedNewPodKey]).To(Equal(oj2.Status.TargetDetails[0].ExtraInfo[appsv1alpha1.ExtraInfoReplacedNewPodKey]))
+=======
+			Expect(oj1.Status.TargetDetails[0].ExtraInfo[replace.ExtraInfoReplacedByNewPodKey]).To(Equal(oj2.Status.TargetDetails[0].ExtraInfo[replace.ExtraInfoReplacedByNewPodKey]))
+>>>>>>> acab965 (fix go lint)
 		})
 
 		framework.ConformanceIt("delete operationjob to cancel replace", func() {
