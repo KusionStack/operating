@@ -75,7 +75,7 @@ func AllowPodInclude(c client.Client, pod *corev1.Pod, cls *appsv1alpha1.CollaSe
 func AllowResourceExclude(obj metav1.Object, ownerName, ownerKind string) (bool, string) {
 	labels := obj.GetLabels()
 	// not controlled by ks manager
-	if labels == nil || len(labels) == 0 {
+	if labels == nil {
 		return false, "object's label is empty"
 	} else if val, exist := labels[appsv1alpha1.ControlledByKusionStackLabelKey]; !exist || val != "true" {
 		return false, "object is not controlled by kusionstack system"
@@ -94,13 +94,13 @@ func AllowResourceInclude(obj metav1.Object, ownerName, ownerKind string) (bool,
 	ownerRefs := obj.GetOwnerReferences()
 
 	// not controlled by ks manager
-	if labels == nil || len(labels) == 0 {
+	if labels == nil {
 		return false, "object's label is empty"
 	} else if val, exist := labels[appsv1alpha1.ControlledByKusionStackLabelKey]; !exist || val != "true" {
 		return false, "object is not controlled by kusionstack system"
 	}
 
-	if ownerRefs != nil && len(ownerRefs) > 0 {
+	if ownerRefs != nil {
 		if controller := metav1.GetControllerOf(obj); controller != nil {
 			// controlled by others
 			if controller.Name != ownerName || controller.Kind != ownerKind {
