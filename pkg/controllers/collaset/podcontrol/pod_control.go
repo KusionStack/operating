@@ -24,6 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
+	appsv1alpha1 "kusionstack.io/kube-api/apps/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	refmanagerutil "kusionstack.io/kuperator/pkg/controllers/utils/refmanager"
@@ -36,6 +37,8 @@ type Interface interface {
 	DeletePod(pod *corev1.Pod) error
 	UpdatePod(pod *corev1.Pod) error
 	PatchPod(pod *corev1.Pod, patch client.Patch) error
+	OrphanPod(cls *appsv1alpha1.CollaSet, pod *corev1.Pod) error
+	AdoptPod(cls *appsv1alpha1.CollaSet, pod *corev1.Pod) error
 }
 
 func NewRealPodControl(client client.Client, scheme *runtime.Scheme) Interface {
@@ -86,6 +89,40 @@ func (pc *RealPodControl) UpdatePod(pod *corev1.Pod) error {
 
 func (pc *RealPodControl) PatchPod(pod *corev1.Pod, patch client.Patch) error {
 	return pc.client.Patch(context.TODO(), pod, patch)
+}
+
+func (pc *RealPodControl) OrphanPod(cls *appsv1alpha1.CollaSet, pod *corev1.Pod) error {
+	if cls.Spec.Selector.MatchLabels == nil {
+		return nil
+	}
+	cm, err := refmanagerutil.NewRefManager(pc.client, cls.Spec.Selector, cls, pc.scheme)
+	if err != nil {
+		return fmt.Errorf("fail to create ref manager: %s", err)
+	}
+
+	if pod.Labels == nil {
+		pod.Labels = make(map[string]string)
+	}
+	if pod.Annotations == nil {
+		pod.Annotations = make(map[string]string)
+	}
+	return cm.Release(pod)
+}
+
+func (pc *RealPodControl) AdoptPod(cls *appsv1alpha1.CollaSet, pod *corev1.Pod) error {
+	if cls.Spec.Selector.MatchLabels == nil {
+		return nil
+	}
+	cm, err := refmanagerutil.NewRefManager(pc.client, cls.Spec.Selector, cls, pc.scheme)
+	if err != nil {
+		return fmt.Errorf("fail to create ref manager: %s", err)
+	}
+
+	_, err = cm.ClaimOwned([]client.Object{pod})
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (pc *RealPodControl) getPodSetPods(pods []*corev1.Pod, selector *metav1.LabelSelector, owner client.Object) ([]*corev1.Pod, error) {
