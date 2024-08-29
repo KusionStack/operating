@@ -671,14 +671,12 @@ func (r *RealSyncControl) Update(
 			continue
 		}
 
-		if podInfo.CurrentRevision.Name == UnknownRevision {
-			continue
-		}
-
 		// 3.1 fulfillPodUpdateInfo to all not updatedRevision pod
-		if err = updater.FulfillPodUpdatedInfo(ctx, resources.UpdatedRevision, podInfo); err != nil {
-			logger.Error(err, fmt.Sprintf("fail to analyse pod %s/%s in-place update support", podInfo.Namespace, podInfo.Name))
-			continue
+		if podInfo.CurrentRevision.Name != UnknownRevision {
+			if err = updater.FulfillPodUpdatedInfo(ctx, resources.UpdatedRevision, podInfo); err != nil {
+				logger.Error(err, fmt.Sprintf("fail to analyse pod %s/%s in-place update support", podInfo.Namespace, podInfo.Name))
+				continue
+			}
 		}
 
 		if podInfo.DeletionTimestamp != nil {
