@@ -148,14 +148,13 @@ func (r *RealSyncControl) SyncPods(
 
 		// priority: toDelete > toReplace > toExclude
 		if toDelete {
-			toExcludePodNames.Delete(pod.Name)
 			toDeletePodNames.Delete(pod.Name)
 		}
 		if toExclude {
-			if podDuringReplace(pod) {
+			if podDuringReplace(pod) || toDelete {
 				toExcludePodNames.Delete(pod.Name)
 			} else {
-				// exclude pod and remove podContext
+				// exclude pod and delete its podContext
 				idToReclaim.Insert(id)
 			}
 		}
@@ -253,6 +252,42 @@ func (r *RealSyncControl) SyncPods(
 	}
 
 	return inExSucceed, podWrappers, ownedIDs, nil
+}
+
+func (r *RealSyncControl) ReplacePods(
+	ctx context.Context,
+	instance *appsv1alpha1.CollaSet,
+	resources *collasetutils.RelatedResources,
+	filteredPods []*collasetutils.PodWrapper,
+	ownedIDs map[int]*appsv1alpha1.ContextDetail,
+) {
+	//needReplaceOriginPods, needCleanLabelPods, podsNeedCleanLabels, needDeletePods, replaceIndicateCount := dealReplacePods(filteredPods)
+	//
+	//// 3.1 delete origin pods for replace
+	//err = r.deletePodsByLabel(needDeletePods)
+	//if err != nil {
+	//	r.recorder.Eventf(instance, corev1.EventTypeWarning, "ReplacePod", "delete pods by label with error: %s", err.Error())
+	//}
+	//
+	//// 3.2 clean labels for replace pods
+	//needUpdateContext, needDeletePodsIDs, err := r.cleanReplacePodLabels(needCleanLabelPods, podsNeedCleanLabels, ownedIDs, currentIDs)
+	//idToReclaim.Insert(needDeletePodsIDs...)
+	//if err != nil {
+	//	r.recorder.Eventf(instance, corev1.EventTypeWarning, "ReplacePod", fmt.Sprintf("clean pods replace pair origin name label with error: %s", err.Error()))
+	//	return false, nil, nil, err
+	//}
+	//
+	//// 3.3 create new pods for need replace pods
+	//successCount, err := r.replaceOriginPods(ctx, instance, resources, needReplaceOriginPods, ownedIDs, currentIDs)
+	//needUpdateContext = needUpdateContext || successCount > 0
+	//if err != nil {
+	//	r.recorder.Eventf(instance, corev1.EventTypeWarning, "ReplacePod", "deal replace pods with error: %s", err.Error())
+	//	return false, nil, nil, err
+	//}
+}
+
+func (r *RealSyncControl) IncludeExcludePods() {
+
 }
 
 func (r *RealSyncControl) reclaimOwnedIDs(

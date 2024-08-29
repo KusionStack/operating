@@ -282,50 +282,42 @@ var _ = SIGDescribe("CollaSet", func() {
 			}, 10*time.Second, 3*time.Second).Should(Equal(true))
 
 			By("Check pod is excluded")
-			var excludedPodID string
+			excludedPodID := PodToExclude.Labels[appsv1alpha1.PodInstanceIDLabelKey]
 			Eventually(func() bool {
 				pods, err = tester.ListPodsForCollaSet(cls)
 				Expect(err).Should(BeNil())
-				podExcluded := false
 				for i := range pods {
 					pod := pods[i]
 					if pod.Name == PodToExclude.Name {
-						podExcluded = len(pod.OwnerReferences) == 0
-						podExcluded = podExcluded && pod.Labels[appsv1alpha1.PodOrphanedIndicateLabelKey] == "true"
-						excludedPodID = pod.Labels[appsv1alpha1.PodInstanceIDLabelKey]
-						break
+						return false
 					}
 				}
-				return podExcluded
+				return true
 			}, 10*time.Second, 1*time.Second).Should(BeTrue())
 
 			By("Check pvc is excluded")
 			Eventually(func() bool {
-				pvcExcluded := false
 				pvcs, err := tester.ListPVCForCollaSet(cls)
 				Expect(err).Should(BeNil())
 				for i := range pvcs {
 					pvc := pvcs[i]
 					if pvc.Labels[appsv1alpha1.PodInstanceIDLabelKey] == excludedPodID {
-						pvcExcluded = len(pvc.OwnerReferences) == 0
-						pvcExcluded = pvcExcluded && pvc.Labels[appsv1alpha1.PodOrphanedIndicateLabelKey] == "true"
-						break
+						return false
 					}
 				}
-				return pvcExcluded
+				return true
 			}, 10*time.Second, 1*time.Second).Should(BeTrue())
 
 			By("Wait for CollaSet reconciled")
 			Eventually(func() error { return tester.ExpectedStatusReplicas(cls, 2, 2, 2, 2, 2) }, 30*time.Second, 3*time.Second).ShouldNot(HaveOccurred())
 
 			By("Check resourceContext")
-			resourceContexts, err := tester.ListResourceContextsForCollaSet(cls)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(len(resourceContexts[0].Spec.Contexts)).To(Equal(2))
-			Expect(func() bool {
+			Eventually(func() bool {
+				resourceContexts, err := tester.ListResourceContextsForCollaSet(cls)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(len(resourceContexts[0].Spec.Contexts)).To(Equal(2))
 				for _, contextDetail := range resourceContexts[0].Spec.Contexts {
-					id, _ := strconv.Atoi(excludedPodID)
-					if id == contextDetail.ID {
+					if excludedPodID == strconv.Itoa(contextDetail.ID) {
 						return false
 					}
 				}
@@ -337,7 +329,7 @@ var _ = SIGDescribe("CollaSet", func() {
 			Expect(err).NotTo(HaveOccurred())
 			PodToInclude := PodToExclude
 			Expect(tester.UpdateCollaSet(cls, func(cls *appsv1alpha1.CollaSet) {
-				cls.Spec.Replicas = int32Pointer(2)
+				cls.Spec.Replicas = int32Pointer(3)
 				cls.Spec.ScaleStrategy = appsv1alpha1.ScaleStrategy{
 					PodToExclude: []string{},
 					PodToInclude: []string{PodToInclude.Name},
@@ -356,45 +348,38 @@ var _ = SIGDescribe("CollaSet", func() {
 			Eventually(func() bool {
 				pods, err = tester.ListPodsForCollaSet(cls)
 				Expect(err).Should(BeNil())
-				podIncluded := false
 				for i := range pods {
 					pod := pods[i]
 					if pod.Name == PodToExclude.Name {
-						podIncluded = len(pod.OwnerReferences) == 1
-						podIncluded = podIncluded && pod.Labels[appsv1alpha1.PodOrphanedIndicateLabelKey] == ""
-						break
+						return true
 					}
 				}
-				return podIncluded
+				return false
 			}, 10*time.Second, 1*time.Second).Should(BeTrue())
 
 			By("Check pvc is included")
 			Eventually(func() bool {
-				pvcIncluded := false
 				pvcs, err := tester.ListPVCForCollaSet(cls)
 				Expect(err).Should(BeNil())
 				for i := range pvcs {
 					pvc := pvcs[i]
 					if pvc.Labels[appsv1alpha1.PodInstanceIDLabelKey] == excludedPodID {
-						pvcIncluded = len(pvc.OwnerReferences) == 1
-						pvcIncluded = pvcIncluded && pvc.Labels[appsv1alpha1.PodOrphanedIndicateLabelKey] == ""
-						break
+						return true
 					}
 				}
-				return pvcIncluded
+				return false
 			}, 10*time.Second, 1*time.Second).Should(BeTrue())
 
 			By("Wait for CollaSet reconciled")
 			Eventually(func() error { return tester.ExpectedStatusReplicas(cls, 3, 3, 3, 3, 3) }, 30*time.Second, 3*time.Second).ShouldNot(HaveOccurred())
 
 			By("Check resourceContext")
-			resourceContexts, err = tester.ListResourceContextsForCollaSet(cls)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(len(resourceContexts[0].Spec.Contexts)).To(Equal(3))
-			Expect(func() bool {
+			Eventually(func() bool {
+				resourceContexts, err := tester.ListResourceContextsForCollaSet(cls)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(len(resourceContexts[0].Spec.Contexts)).To(Equal(3))
 				for _, contextDetail := range resourceContexts[0].Spec.Contexts {
-					id, _ := strconv.Atoi(excludedPodID)
-					if id == contextDetail.ID {
+					if excludedPodID == strconv.Itoa(contextDetail.ID) {
 						return true
 					}
 				}

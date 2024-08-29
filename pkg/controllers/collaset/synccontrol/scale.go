@@ -149,8 +149,12 @@ func (r *RealSyncControl) dealIncludeExcludePods(ctx context.Context, cls *appsv
 
 	toExcludePods, notAllowedExcludePods, exErr := r.allowIncludeExcludePods(ctx, cls, excludePodNames.List(), collasetutils.AllowResourceExclude)
 	toIncludePods, notAllowedIncludePods, inErr := r.allowIncludeExcludePods(ctx, cls, includePodNames.List(), collasetutils.AllowResourceInclude)
-	r.recorder.Eventf(cls, corev1.EventTypeWarning, "ExcludeNotAllowed", fmt.Sprintf("pods are not allowed to exclude [%v]", notAllowedExcludePods.List()))
-	r.recorder.Eventf(cls, corev1.EventTypeWarning, "IncludeNotAllowed", fmt.Sprintf("pods are not allowed to include [%v]", notAllowedIncludePods.List()))
+	if len(notAllowedExcludePods) > 0 {
+		r.recorder.Eventf(cls, corev1.EventTypeWarning, "ExcludeNotAllowed", fmt.Sprintf("pods are not allowed to exclude [%v]", notAllowedExcludePods.List()))
+	}
+	if len(notAllowedIncludePods) > 0 {
+		r.recorder.Eventf(cls, corev1.EventTypeWarning, "IncludeNotAllowed", fmt.Sprintf("pods are not allowed to include [%v]", notAllowedIncludePods.List()))
+	}
 	return toExcludePods, toIncludePods, controllerutils.AggregateErrors([]error{exErr, inErr})
 }
 
@@ -161,7 +165,12 @@ func (r *RealSyncControl) allowIncludeExcludePods(ctx context.Context, cls *apps
 	notAllowPods = sets.String{}
 	for i := range podNames {
 		pod := &corev1.Pod{}
-		if err = r.client.Get(ctx, types.NamespacedName{Namespace: cls.Namespace, Name: podNames[i]}, pod); err != nil {
+		err = r.client.Get(ctx, types.NamespacedName{Namespace: cls.Namespace, Name: podNames[i]}, pod)
+		if errors.IsNotFound(err) {
+			notAllowPods.Insert(pod.Name)
+			continue
+		} else if err != nil {
+			r.recorder.Eventf(cls, corev1.EventTypeWarning, "ExcludeIncludeNotAllowed", fmt.Sprintf("failed to find pod %s: %s", podNames[i], err.Error()))
 			return
 		}
 
@@ -172,8 +181,11 @@ func (r *RealSyncControl) allowIncludeExcludePods(ctx context.Context, cls *apps
 		}
 
 		for _, volume := range pod.Spec.Volumes {
+			if volume.PersistentVolumeClaim == nil {
+				continue
+			}
 			pvc := &corev1.PersistentVolumeClaim{}
-			err = r.client.Get(context.Background(), types.NamespacedName{Namespace: pod.Namespace, Name: volume.PersistentVolumeClaim.ClaimName}, pvc)
+			err = r.client.Get(ctx, types.NamespacedName{Namespace: pod.Namespace, Name: volume.PersistentVolumeClaim.ClaimName}, pvc)
 			// If pvc not found, ignore it. In case of pvc is filtered out by controller-mesh
 			if errors.IsNotFound(err) {
 				continue
@@ -197,6 +209,7 @@ func (r *RealSyncControl) doIncludeExcludePods(ctx context.Context, cls *appsv1a
 	_, exErr := controllerutils.SlowStartBatch(len(excludePods), controllerutils.SlowStartInitialBatchSize, false, func(idx int, _ error) error {
 		return r.excludePod(ctx, cls, excludePods[idx])
 	})
+
 	_, inErr := controllerutils.SlowStartBatch(len(includePods), controllerutils.SlowStartInitialBatchSize, false, func(idx int, _ error) error {
 		return r.includePod(ctx, cls, includePods[idx], strconv.Itoa(availableContexts[idx].ID))
 	})
@@ -210,6 +223,9 @@ func (r *RealSyncControl) excludePod(ctx context.Context, cls *appsv1alpha1.Coll
 	}
 	var pvcs []*corev1.PersistentVolumeClaim
 	for _, volume := range pod.Spec.Volumes {
+		if volume.PersistentVolumeClaim == nil {
+			continue
+		}
 		pvc := &corev1.PersistentVolumeClaim{}
 		err := r.client.Get(ctx, types.NamespacedName{Namespace: pod.Namespace, Name: volume.PersistentVolumeClaim.ClaimName}, pvc)
 		// If pvc not found, ignore it. In case of pvc is filtered out by controller-mesh
@@ -242,6 +258,9 @@ func (r *RealSyncControl) includePod(ctx context.Context, cls *appsv1alpha1.Coll
 
 	var pvcs []*corev1.PersistentVolumeClaim
 	for _, volume := range pod.Spec.Volumes {
+		if volume.PersistentVolumeClaim == nil {
+			continue
+		}
 		pvc := &corev1.PersistentVolumeClaim{}
 		err := r.client.Get(ctx, types.NamespacedName{Namespace: pod.Namespace, Name: volume.PersistentVolumeClaim.ClaimName}, pvc)
 		// If pvc not found, ignore it. In case of pvc is filtered out by controller-mesh
