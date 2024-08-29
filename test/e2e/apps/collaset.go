@@ -235,6 +235,173 @@ var _ = SIGDescribe("CollaSet", func() {
 			}, 30*time.Second, 3*time.Second).Should(Equal(true))
 		})
 
+		framework.ConformanceIt("Exclude include pods", func() {
+			cls := tester.NewCollaSet("collaset-"+randStr, 3, appsv1alpha1.UpdateStrategy{})
+			cls.Spec.VolumeClaimTemplates = []v1.PersistentVolumeClaim{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "pvc-test",
+					},
+					Spec: v1.PersistentVolumeClaimSpec{
+						Resources: v1.ResourceRequirements{
+							Requests: v1.ResourceList{
+								"storage": resource.MustParse("100m"),
+							},
+						},
+						AccessModes: []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce},
+					},
+				},
+			}
+			cls.Spec.Template.Spec.Containers[0].VolumeMounts = []v1.VolumeMount{
+				{
+					MountPath: "/path/to/mount",
+					Name:      "pvc-test",
+				},
+			}
+			Expect(tester.CreateCollaSet(cls)).NotTo(HaveOccurred())
+			By("Wait for status replicas satisfied")
+			Eventually(func() error { return tester.ExpectedStatusReplicas(cls, 3, 3, 3, 3, 3) }, 30*time.Second, 3*time.Second).ShouldNot(HaveOccurred())
+
+			By("exclude pod and scale in 1 replicas")
+			pods, err := tester.ListPodsForCollaSet(cls)
+			Expect(err).NotTo(HaveOccurred())
+			PodToExclude := pods[0]
+			Expect(tester.UpdateCollaSet(cls, func(cls *appsv1alpha1.CollaSet) {
+				cls.Spec.Replicas = int32Pointer(2)
+				cls.Spec.ScaleStrategy = appsv1alpha1.ScaleStrategy{
+					PodToExclude: []string{PodToExclude.Name},
+				}
+			})).NotTo(HaveOccurred())
+
+			By("Wait for CollaSet reconciled")
+			Eventually(func() bool {
+				if err := tester.GetCollaSet(cls); err != nil {
+					return false
+				}
+				return cls.Generation == cls.Status.ObservedGeneration
+			}, 10*time.Second, 3*time.Second).Should(Equal(true))
+
+			By("Check pod is excluded")
+			var excludedPodID string
+			Eventually(func() bool {
+				pods, err = tester.ListPodsForCollaSet(cls)
+				Expect(err).Should(BeNil())
+				podExcluded := false
+				for i := range pods {
+					pod := pods[i]
+					if pod.Name == PodToExclude.Name {
+						podExcluded = len(pod.OwnerReferences) == 0
+						podExcluded = podExcluded && pod.Labels[appsv1alpha1.PodOrphanedIndicateLabelKey] == "true"
+						excludedPodID = pod.Labels[appsv1alpha1.PodInstanceIDLabelKey]
+						break
+					}
+				}
+				return podExcluded
+			}, 10*time.Second, 1*time.Second).Should(BeTrue())
+
+			By("Check pvc is excluded")
+			Eventually(func() bool {
+				pvcExcluded := false
+				pvcs, err := tester.ListPVCForCollaSet(cls)
+				Expect(err).Should(BeNil())
+				for i := range pvcs {
+					pvc := pvcs[i]
+					if pvc.Labels[appsv1alpha1.PodInstanceIDLabelKey] == excludedPodID {
+						pvcExcluded = len(pvc.OwnerReferences) == 0
+						pvcExcluded = pvcExcluded && pvc.Labels[appsv1alpha1.PodOrphanedIndicateLabelKey] == "true"
+						break
+					}
+				}
+				return pvcExcluded
+			}, 10*time.Second, 1*time.Second).Should(BeTrue())
+
+			By("Wait for CollaSet reconciled")
+			Eventually(func() error { return tester.ExpectedStatusReplicas(cls, 2, 2, 2, 2, 2) }, 30*time.Second, 3*time.Second).ShouldNot(HaveOccurred())
+
+			By("Check resourceContext")
+			resourceContexts, err := tester.ListResourceContextsForCollaSet(cls)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(len(resourceContexts[0].Spec.Contexts)).To(Equal(2))
+			Expect(func() bool {
+				for _, contextDetail := range resourceContexts[0].Spec.Contexts {
+					id, _ := strconv.Atoi(excludedPodID)
+					if id == contextDetail.ID {
+						return false
+					}
+				}
+				return true
+			}, 10*time.Second, 3*time.Second).Should(BeTrue())
+
+			By("include pod and scale out 1 replicas")
+			pods, err = tester.ListPodsForCollaSet(cls)
+			Expect(err).NotTo(HaveOccurred())
+			PodToInclude := PodToExclude
+			Expect(tester.UpdateCollaSet(cls, func(cls *appsv1alpha1.CollaSet) {
+				cls.Spec.Replicas = int32Pointer(2)
+				cls.Spec.ScaleStrategy = appsv1alpha1.ScaleStrategy{
+					PodToExclude: []string{},
+					PodToInclude: []string{PodToInclude.Name},
+				}
+			})).NotTo(HaveOccurred())
+
+			By("Wait for CollaSet reconciled")
+			Eventually(func() bool {
+				if err := tester.GetCollaSet(cls); err != nil {
+					return false
+				}
+				return cls.Generation == cls.Status.ObservedGeneration
+			}, 10*time.Second, 3*time.Second).Should(Equal(true))
+
+			By("Check pod is included")
+			Eventually(func() bool {
+				pods, err = tester.ListPodsForCollaSet(cls)
+				Expect(err).Should(BeNil())
+				podIncluded := false
+				for i := range pods {
+					pod := pods[i]
+					if pod.Name == PodToExclude.Name {
+						podIncluded = len(pod.OwnerReferences) == 1
+						podIncluded = podIncluded && pod.Labels[appsv1alpha1.PodOrphanedIndicateLabelKey] == ""
+						break
+					}
+				}
+				return podIncluded
+			}, 10*time.Second, 1*time.Second).Should(BeTrue())
+
+			By("Check pvc is included")
+			Eventually(func() bool {
+				pvcIncluded := false
+				pvcs, err := tester.ListPVCForCollaSet(cls)
+				Expect(err).Should(BeNil())
+				for i := range pvcs {
+					pvc := pvcs[i]
+					if pvc.Labels[appsv1alpha1.PodInstanceIDLabelKey] == excludedPodID {
+						pvcIncluded = len(pvc.OwnerReferences) == 1
+						pvcIncluded = pvcIncluded && pvc.Labels[appsv1alpha1.PodOrphanedIndicateLabelKey] == ""
+						break
+					}
+				}
+				return pvcIncluded
+			}, 10*time.Second, 1*time.Second).Should(BeTrue())
+
+			By("Wait for CollaSet reconciled")
+			Eventually(func() error { return tester.ExpectedStatusReplicas(cls, 3, 3, 3, 3, 3) }, 30*time.Second, 3*time.Second).ShouldNot(HaveOccurred())
+
+			By("Check resourceContext")
+			resourceContexts, err = tester.ListResourceContextsForCollaSet(cls)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(len(resourceContexts[0].Spec.Contexts)).To(Equal(3))
+			Expect(func() bool {
+				for _, contextDetail := range resourceContexts[0].Spec.Contexts {
+					id, _ := strconv.Atoi(excludedPodID)
+					if id == contextDetail.ID {
+						return true
+					}
+				}
+				return false
+			}, 10*time.Second, 3*time.Second).Should(BeTrue())
+		})
+
 		framework.ConformanceIt("PVC retention policy with scale in pods", func() {
 			cls := tester.NewCollaSet("collaset-"+randStr, 2, appsv1alpha1.UpdateStrategy{})
 			cls.Spec.ScaleStrategy.PersistentVolumeClaimRetentionPolicy = &appsv1alpha1.PersistentVolumeClaimRetentionPolicy{

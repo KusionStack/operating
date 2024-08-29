@@ -215,14 +215,14 @@ func (r *RealSyncControl) SyncPods(
 	}
 
 	// 5. include exclude pods
-	var stopReconcile bool
+	var inExSucceed bool
 	if len(toExcludePodNames) > 0 || len(toIncludePodNames) > 0 {
 		availableContexts := extractAvailableContexts(len(toIncludePodNames), ownedIDs, currentIDs)
 		if err = r.doIncludeExcludePods(ctx, instance, toExcludePodNames.List(), toIncludePodNames.List(), availableContexts); err != nil {
 			r.recorder.Eventf(instance, corev1.EventTypeWarning, "DoExcludeIncludePod", "collaset syncPods include exclude with error: %s", err.Error())
 			return false, nil, nil, err
 		}
-		stopReconcile = true
+		inExSucceed = true
 	}
 
 	// 4.1 Reclaim Pod ID which is (1) during ScalingIn, (2) ReplaceOriginPod (3) ExcludePods; besides, Pod & PVC are all non-existing
@@ -252,7 +252,7 @@ func (r *RealSyncControl) SyncPods(
 		})
 	}
 
-	return stopReconcile, podWrappers, ownedIDs, nil
+	return inExSucceed, podWrappers, ownedIDs, nil
 }
 
 func (r *RealSyncControl) reclaimOwnedIDs(

@@ -324,7 +324,7 @@ func (r *RealSyncControl) adoptPvcsLeftByRetainPolicy(ctx context.Context, cls *
 
 func (r *RealSyncControl) reclaimScaleStrategy(ctx context.Context, deletedPods sets.String, excludedPods sets.String, includedPods sets.String, cls *appsv1alpha1.CollaSet) error {
 	// ReclaimPodScaleStrategy FeatureGate defaults to true
-	// Add '--feature-gates=ReclaimPodScaleStrategy=false' to container args, to disable reclaim of podToDelete
+	// Add '--feature-gates=ReclaimPodScaleStrategy=false' to container args, to disable reclaim of podToDelete, podToExclude, podToInclude
 	if feature.DefaultFeatureGate.Enabled(features.ReclaimPodScaleStrategy) {
 		// reclaim PodToDelete
 		toDeletePods := sets.NewString(cls.Spec.ScaleStrategy.PodToDelete...)
