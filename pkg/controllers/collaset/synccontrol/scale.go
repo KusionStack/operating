@@ -32,8 +32,7 @@ import (
 	appsv1alpha1 "kusionstack.io/kube-api/apps/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	appsv1alpha1 "kusionstack.io/kube-api/apps/v1alpha1"
-
+	"kusionstack.io/kuperator/pkg/controllers/collaset/podcontext"
 	collasetutils "kusionstack.io/kuperator/pkg/controllers/collaset/utils"
 	controllerutils "kusionstack.io/kuperator/pkg/controllers/utils"
 	"kusionstack.io/kuperator/pkg/controllers/utils/expectations"
@@ -285,6 +284,32 @@ func (r *RealSyncControl) includePod(ctx context.Context, cls *appsv1alpha1.Coll
 		}
 	}
 	return collasetutils.ActiveExpectations.ExpectUpdate(cls, expectations.Pod, pod.Name, pod.ResourceVersion)
+}
+
+func (r *RealSyncControl) getIncludePodIDs(
+	want int,
+	instance *appsv1alpha1.CollaSet,
+	resources *collasetutils.RelatedResources,
+	ownedIDs map[int]*appsv1alpha1.ContextDetail,
+	currentIDs map[int]struct{}) ([]*appsv1alpha1.ContextDetail, map[int]*appsv1alpha1.ContextDetail, error) {
+
+	availableContexts := extractAvailableContexts(want, ownedIDs, currentIDs)
+	if len(availableContexts) >= want {
+		return availableContexts, ownedIDs, nil
+	}
+
+	diff := want - len(availableContexts)
+
+	var newOwnedIDs map[int]*appsv1alpha1.ContextDetail
+	var err error
+	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		newOwnedIDs, err = podcontext.AllocateID(r.client, instance, resources.UpdatedRevision.Name, len(ownedIDs)+diff)
+		return err
+	}); err != nil {
+		return nil, ownedIDs, fmt.Errorf("fail to allocate IDs using context when include Pods: %s", err)
+	}
+
+	return extractAvailableContexts(want, newOwnedIDs, currentIDs), newOwnedIDs, nil
 }
 
 func (r *RealSyncControl) adoptPvcsLeftByRetainPolicy(ctx context.Context, cls *appsv1alpha1.CollaSet) ([]*corev1.PersistentVolumeClaim, error) {
