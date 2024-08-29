@@ -149,7 +149,6 @@ func (r *ReconcileOperationJob) filterAndOperateAllowOpsTargets(
 			} else {
 				candidate.OpsStatus.Progress = appsv1alpha1.OperationProgressProcessing
 			}
-			candidate.OpsStatus.Progress = appsv1alpha1.OperationProgressProcessing
 		}
 
 		if isAllowedOps {
