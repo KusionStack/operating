@@ -211,6 +211,7 @@ func (r *RealSyncControl) SyncPods(
 	needUpdateContext = needUpdateContext || successCount > 0
 	if err != nil {
 		r.recorder.Eventf(instance, corev1.EventTypeWarning, "ReplacePod", "deal replace pods with error: %s", err.Error())
+		return false, nil, nil, err
 	}
 
 	// 5. include exclude pods
