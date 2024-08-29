@@ -277,9 +277,7 @@ func (r *RealSyncControl) reclaimOwnedIDs(
 		delete(ownedIDs, id)
 	}
 
-	// TODO
-	// 1. clean ReplaceNew PodID key: (1) pod is not exists, or (2) pod is not replaceIndicated
-	// 2. delete
+	// TODO clean replace-pair-keys or dirty podContext: (1) pod is not exists, or (2) pod is not replaceIndicated
 
 	if needUpdateContext {
 		logger := r.logger.WithValues("collaset", commonutils.ObjectKeyString(cls))
