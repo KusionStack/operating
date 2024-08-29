@@ -645,7 +645,6 @@ var _ = SIGDescribe("CollaSet", func() {
 					}
 					return cls.Generation == cls.Status.ObservedGeneration
 				}, 10*time.Second, 3*time.Second).Should(Equal(true))
-				fmt.Sprintln(fmt.Sprintf("current partition: %d", partition))
 				Eventually(func() error { return tester.ExpectedStatusReplicas(cls, 3, 3, 3, 3-partition, 3) }, 30*time.Second, 3*time.Second).ShouldNot(HaveOccurred())
 			}
 		})
