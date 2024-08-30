@@ -152,6 +152,7 @@ func (r *RealSyncControl) SyncPods(
 		}
 		if toExclude {
 			if podDuringReplace(pod) || toDelete {
+				// skip exclude until replace and toDelete done
 				toExcludePodNames.Delete(pod.Name)
 			} else {
 				// exclude pod and delete its podContext
@@ -195,6 +196,7 @@ func (r *RealSyncControl) SyncPods(
 	err = r.deletePodsByLabel(needDeletePods)
 	if err != nil {
 		r.recorder.Eventf(instance, corev1.EventTypeWarning, "ReplacePod", "delete pods by label with error: %s", err.Error())
+		return false, nil, nil, err
 	}
 
 	// 3.2 clean labels for replace pods
@@ -437,9 +439,6 @@ func (r *RealSyncControl) Scale(
 		podCh := make(chan *collasetutils.PodWrapper, len(podsToScaleIn))
 		for i := range podsToScaleIn {
 			if podopslifecycle.IsDuringOps(collasetutils.ScaleInOpsLifecycleAdapter, podsToScaleIn[i].Pod) {
-				continue
-			}
-			if podsToScaleIn[i].ToExclude {
 				continue
 			}
 			podCh <- podsToScaleIn[i]

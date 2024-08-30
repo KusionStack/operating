@@ -414,7 +414,7 @@ func mapReplaceOriginToNewPodContext(ownedIDs map[int]*appsv1alpha1.ContextDetai
 }
 
 func podDuringReplace(pod *corev1.Pod) bool {
-	if pod.Labels == nil || len(pod.Labels) == 0 {
+	if pod.Labels == nil {
 		return false
 	}
 	_, replaceIndicate := pod.Labels[appsv1alpha1.PodReplaceIndicationLabelKey]
