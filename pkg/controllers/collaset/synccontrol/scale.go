@@ -211,7 +211,7 @@ func (r *RealSyncControl) allowIncludeExcludePods(ctx context.Context, cls *apps
 	return allowPods, notAllowPods, nil
 }
 
-// doIncludeExcludePods do real include and exclude
+// doIncludeExcludePods do real include and exclude for pods which are allowed to in/exclude
 func (r *RealSyncControl) doIncludeExcludePods(ctx context.Context, cls *appsv1alpha1.CollaSet, excludePods []string, includePods []string, availableContexts []*appsv1alpha1.ContextDetail) error {
 	_, exErr := controllerutils.SlowStartBatch(len(excludePods), controllerutils.SlowStartInitialBatchSize, false, func(idx int, _ error) error {
 		return r.excludePod(ctx, cls, excludePods[idx])
