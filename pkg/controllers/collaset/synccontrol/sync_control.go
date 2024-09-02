@@ -103,7 +103,7 @@ type RealSyncControl struct {
 	recorder   record.EventRecorder
 }
 
-// SyncPods is used to reclaim Pod instance ID
+// SyncPods is used to parse podWrappers and reclaim Pod instance ID
 func (r *RealSyncControl) SyncPods(
 	ctx context.Context,
 	instance *appsv1alpha1.CollaSet,
@@ -232,6 +232,7 @@ func (r *RealSyncControl) SyncPods(
 	return inExSucceed, podWrappers, ownedIDs, nil
 }
 
+// Replace is used to replace replace-indicate pods
 func (r *RealSyncControl) Replace(
 	ctx context.Context,
 	instance *appsv1alpha1.CollaSet,
@@ -299,6 +300,7 @@ func (r *RealSyncControl) Replace(
 	return podWrappers, ownedIDs, nil
 }
 
+// Scale is used to reconcile replicas to spec.replicas
 func (r *RealSyncControl) Scale(
 	ctx context.Context,
 	cls *appsv1alpha1.CollaSet,
@@ -633,6 +635,7 @@ func decideContextRevision(contextDetail *appsv1alpha1.ContextDetail, updatedRev
 	return needUpdateContext
 }
 
+// Update is used to update pods to spec.template
 func (r *RealSyncControl) Update(
 	ctx context.Context,
 	cls *appsv1alpha1.CollaSet,
