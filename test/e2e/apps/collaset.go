@@ -451,7 +451,7 @@ var _ = SIGDescribe("CollaSet", func() {
 				Expect(err).Should(BeNil())
 				for i := range pods {
 					if pods[i].Labels[appsv1alpha1.PodReplacePairOriginName] == originPod.Name {
-						Expect(tester.UpdatePod(originPod, func(pod *v1.Pod) {
+						Expect(tester.UpdatePod(pods[i], func(pod *v1.Pod) {
 							pod.Labels[appsv1alpha1.PodServiceAvailableLabel] = "true"
 						})).NotTo(HaveOccurred())
 						return true
