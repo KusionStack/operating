@@ -199,7 +199,7 @@ func (r *RealSyncControl) SyncPods(
 		}
 	}
 
-	// include exclude pods
+	// do include exclude pods, and skip doSync() if succeeded
 	var inExSucceed bool
 	if len(toExcludePodNames) > 0 || len(toIncludePodNames) > 0 {
 		var availableContexts []*appsv1alpha1.ContextDetail
@@ -297,54 +297,6 @@ func (r *RealSyncControl) Replace(
 	}
 
 	return podWrappers, ownedIDs, nil
-}
-
-func (r *RealSyncControl) reclaimOwnedIDs(
-	needUpdateContext bool,
-	cls *appsv1alpha1.CollaSet,
-	idToReclaim sets.Int,
-	ownedIDs map[int]*appsv1alpha1.ContextDetail,
-	currentIDs map[int]struct{}) error {
-	// TODO stateful case
-	// 1) only reclaim non-existing Pods' ID. Do not reclaim terminating Pods' ID until these Pods and PVC have been deleted from ETCD
-	// 2) do not filter out these terminating Pods
-	for id, contextDetail := range ownedIDs {
-		if _, exist := currentIDs[id]; exist {
-			continue
-		}
-		if contextDetail.Contains(ScaleInContextDataKey, "true") {
-			idToReclaim.Insert(id)
-		}
-	}
-
-	for _, id := range idToReclaim.List() {
-		needUpdateContext = true
-		delete(ownedIDs, id)
-	}
-
-	// TODO clean replace-pair-keys or dirty podContext
-	// 1) replace pair pod are not exists
-	// 2) pod exists but is not replaceIndicated
-
-	if needUpdateContext {
-		logger := r.logger.WithValues("collaset", commonutils.ObjectKeyString(cls))
-		logger.V(1).Info("try to update ResourceContext for CollaSet when sync")
-		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			return podcontext.UpdateToPodContext(r.client, cls, ownedIDs)
-		}); err != nil {
-			return fmt.Errorf("fail to update ResourceContext when reclaiming IDs: %s", err)
-		}
-	}
-	return nil
-}
-
-func (r *RealSyncControl) updateCollaSet(ctx context.Context, cls *appsv1alpha1.CollaSet) error {
-	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		return r.client.Update(ctx, cls)
-	}); err != nil {
-		return err
-	}
-	return collasetutils.ActiveExpectations.ExpectUpdate(cls, expectations.CollaSet, cls.Name, cls.ResourceVersion)
 }
 
 func (r *RealSyncControl) Scale(
@@ -608,6 +560,7 @@ func (r *RealSyncControl) Scale(
 	return scaling, recordedRequeueAfter, nil
 }
 
+// FilterOutPlaceHolderPodWrappers filter out placeholder pods
 func FilterOutPlaceHolderPodWrappers(pods []*collasetutils.PodWrapper) []*collasetutils.PodWrapper {
 	var filteredPodWrappers []*collasetutils.PodWrapper
 	for _, pod := range pods {
@@ -641,6 +594,7 @@ func extractAvailableContexts(diff int, ownedIDs map[int]*appsv1alpha1.ContextDe
 	return availableContexts
 }
 
+// deletePodsByLabel try to trigger pod deletion by to-delete label
 func (r *RealSyncControl) deletePodsByLabel(needDeletePods []*corev1.Pod) error {
 	_, err := controllerutils.SlowStartBatch(len(needDeletePods), controllerutils.SlowStartInitialBatchSize, false, func(i int, _ error) error {
 		pod := needDeletePods[i]
@@ -655,7 +609,7 @@ func (r *RealSyncControl) deletePodsByLabel(needDeletePods []*corev1.Pod) error 
 	return err
 }
 
-// decide revision for 3 pod create types: (1) just create, (2) upgrade by recreate, (3) delete and recreate
+// decideContextRevision decides revision for 3 pod create types: (1) just create, (2) upgrade by recreate, (3) delete and recreate
 func decideContextRevision(contextDetail *appsv1alpha1.ContextDetail, updatedRevision *appsv1.ControllerRevision, createSucceeded bool) bool {
 	needUpdateContext := false
 	if !createSucceeded {
@@ -832,6 +786,73 @@ func (r *RealSyncControl) Update(
 	})
 
 	return updating || succCount > 0, recordedRequeueAfter, err
+}
+
+// getAvailablePodIDs try to extract and re-allocate want available IDs.
+func (r *RealSyncControl) getAvailablePodIDs(
+	want int,
+	instance *appsv1alpha1.CollaSet,
+	resources *collasetutils.RelatedResources,
+	ownedIDs map[int]*appsv1alpha1.ContextDetail,
+	currentIDs map[int]struct{}) ([]*appsv1alpha1.ContextDetail, map[int]*appsv1alpha1.ContextDetail, error) {
+
+	availableContexts := extractAvailableContexts(want, ownedIDs, currentIDs)
+	if len(availableContexts) >= want {
+		return availableContexts, ownedIDs, nil
+	}
+
+	diff := want - len(availableContexts)
+
+	var newOwnedIDs map[int]*appsv1alpha1.ContextDetail
+	var err error
+	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		newOwnedIDs, err = podcontext.AllocateID(r.client, instance, resources.UpdatedRevision.Name, len(ownedIDs)+diff)
+		return err
+	}); err != nil {
+		return nil, ownedIDs, fmt.Errorf("fail to allocate IDs using context when include Pods: %s", err)
+	}
+
+	return extractAvailableContexts(want, newOwnedIDs, currentIDs), newOwnedIDs, nil
+}
+
+// reclaimOwnedIDs delete and reclaim unused IDs
+func (r *RealSyncControl) reclaimOwnedIDs(
+	needUpdateContext bool,
+	cls *appsv1alpha1.CollaSet,
+	idToReclaim sets.Int,
+	ownedIDs map[int]*appsv1alpha1.ContextDetail,
+	currentIDs map[int]struct{}) error {
+	// TODO stateful case
+	// 1) only reclaim non-existing Pods' ID. Do not reclaim terminating Pods' ID until these Pods and PVC have been deleted from ETCD
+	// 2) do not filter out these terminating Pods
+	for id, contextDetail := range ownedIDs {
+		if _, exist := currentIDs[id]; exist {
+			continue
+		}
+		if contextDetail.Contains(ScaleInContextDataKey, "true") {
+			idToReclaim.Insert(id)
+		}
+	}
+
+	for _, id := range idToReclaim.List() {
+		needUpdateContext = true
+		delete(ownedIDs, id)
+	}
+
+	// TODO clean replace-pair-keys or dirty podContext
+	// 1) replace pair pod are not exists
+	// 2) pod exists but is not replaceIndicated
+
+	if needUpdateContext {
+		logger := r.logger.WithValues("collaset", commonutils.ObjectKeyString(cls))
+		logger.V(1).Info("try to update ResourceContext for CollaSet when sync")
+		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			return podcontext.UpdateToPodContext(r.client, cls, ownedIDs)
+		}); err != nil {
+			return fmt.Errorf("fail to update ResourceContext when reclaiming IDs: %s", err)
+		}
+	}
+	return nil
 }
 
 func realValue(val *int32) int32 {
