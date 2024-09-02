@@ -461,7 +461,7 @@ var _ = SIGDescribe("CollaSet", func() {
 			}, 10*time.Second, 1*time.Second).Should(BeTrue())
 
 			By("Wait for replace finished and exclude finished")
-			Eventually(func() error { return tester.ExpectedStatusReplicas(cls, 1, 0, 1, 1, 1) }, 30*time.Second, 3*time.Second).ShouldNot(HaveOccurred())
+			Eventually(func() error { return tester.ExpectedStatusReplicas(cls, 1, 0, 0, 1, 1) }, 30*time.Second, 3*time.Second).ShouldNot(HaveOccurred())
 
 			By("Check origin pod is deleted")
 			pods, err = tester.ListPodsForCollaSet(cls)
