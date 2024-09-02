@@ -471,7 +471,7 @@ var _ = SIGDescribe("CollaSet", func() {
 			By("Check resourceContext")
 			resourceContexts, err := tester.ListResourceContextsForCollaSet(cls)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(len(resourceContexts[0].Spec.Contexts)).To(Equal(0))
+			Expect(len(resourceContexts[0].Spec.Contexts)).To(Equal(1))
 		})
 
 		framework.ConformanceIt("Exclude replace new pod", func() {
