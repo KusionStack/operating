@@ -3363,6 +3363,9 @@ var _ = Describe("collaset controller", func() {
 			}
 			return false
 		}, 5*time.Second, time.Second).Should(BeTrue())
+		Eventually(func() error {
+			return expectedStatusReplicas(c, cs, 0, 0, 1, 2, 2, 1, 0, 1)
+		}, 5*time.Second, 1*time.Second).Should(BeNil())
 
 		// allow Pods to scaleIn
 		Eventually(func() bool {
@@ -3387,7 +3390,7 @@ var _ = Describe("collaset controller", func() {
 			return expectedStatusReplicas(c, cs, 0, 0, 0, 1, 1, 0, 0, 0)
 		}, 5*time.Second, 1*time.Second).Should(BeNil())
 
-		// exclude pod is deleted
+		// origin pod is deleted
 		Expect(c.List(context.TODO(), podList, client.InNamespace(cs.Namespace))).Should(BeNil())
 		Expect(len(podList.Items)).Should(BeEquivalentTo(1))
 		Expect(podList.Items[0].Name).ShouldNot(BeEquivalentTo(originPod.Name))
